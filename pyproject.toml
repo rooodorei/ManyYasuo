@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "flet>=0.85.3",
     "py7zr>=1.1.0",
     "pyinstaller>=6.20.0",
     "tkinterdnd2>=0.5.0",

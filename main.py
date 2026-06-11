@@ -14,8 +14,8 @@ CONFIG_FILE = "config.json"
 class PipelineApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("流水线压缩工作站 (原生进度条版)")
-        self.root.geometry("1200x700")
+        self.root.title("流水线压缩工作站 (原生进度条&后缀伪装版)")
+        self.root.geometry("1240x700") # 加宽以完美容纳所有输入框
         self.root.resizable(False, False)
 
         self._is_updating = False
@@ -23,6 +23,7 @@ class PipelineApp:
         config = self.load_config()
         self.sevenz_path = config.get("7z_path", self.find_default_7z())
         self.default_prefix = config.get("prefix", "HGLIST-")
+        self.default_ext = config.get("extension", ".1") # 默认伪装后缀为 .1
         
         self.is_running = False
         self.left_rows = []
@@ -50,7 +51,8 @@ class PipelineApp:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump({
                 "7z_path": self.entry_7z.get(),
-                "prefix": self.entry_prefix.get()
+                "prefix": self.entry_prefix.get(),
+                "extension": self.entry_ext.get() # 保存自定义后缀配置
             }, f)
         messagebox.showinfo("成功", "设置已保存！")
 
@@ -60,15 +62,21 @@ class PipelineApp:
         top_frame.pack(fill=tk.X)
 
         tk.Label(top_frame, text="7z(G)路径:").pack(side=tk.LEFT)
-        self.entry_7z = tk.Entry(top_frame, width=35)
-        self.entry_7z.pack(side=tk.LEFT, padx=(5, 15))
+        self.entry_7z = tk.Entry(top_frame, width=30)
+        self.entry_7z.pack(side=tk.LEFT, padx=(5, 10))
         self.entry_7z.insert(0, self.sevenz_path)
 
-        tk.Label(top_frame, text="文件夹默认前缀:").pack(side=tk.LEFT)
-        self.entry_prefix = tk.Entry(top_frame, width=15)
+        tk.Label(top_frame, text="默认前缀:").pack(side=tk.LEFT)
+        self.entry_prefix = tk.Entry(top_frame, width=12)
         self.entry_prefix.pack(side=tk.LEFT, padx=5)
         self.entry_prefix.insert(0, self.default_prefix)
         self.entry_prefix.bind("<KeyRelease>", lambda e: self.revalidate_left_list())
+
+        # 👑 新增：自定义后缀伪装框
+        tk.Label(top_frame, text="后缀:").pack(side=tk.LEFT)
+        self.entry_ext = tk.Entry(top_frame, width=6)
+        self.entry_ext.pack(side=tk.LEFT, padx=5)
+        self.entry_ext.insert(0, self.default_ext)
 
         tk.Button(top_frame, text="💾 保存配置", command=self.save_config).pack(side=tk.LEFT, padx=10)
 
@@ -253,24 +261,6 @@ class PipelineApp:
         
         valid_paths.sort(key=lambda x: os.path.basename(x))
 
-        if not self.left_rows and valid_paths:
-            min_num = None
-            min_str = None
-            for p in valid_paths:
-                folder_name = os.path.basename(p)
-                matches = re.findall(r'\d+', folder_name)
-                if matches:
-                    num_str = matches[-1]
-                    num = int(num_str)
-                    if min_num is None or num < min_num:
-                        min_num = num
-                        min_str = num_str
-            
-            if min_str is not None:
-                self._is_updating = True 
-                self.counter_var.set(min_str)
-                self._is_updating = False
-
         for path in valid_paths:
             self.unwrap_nested_folders(path)
             if any(row['path'] == path for row in self.left_rows): continue
@@ -392,29 +382,36 @@ class PipelineApp:
         lvl_map = {"仅存储": "0", "极速": "1", "标准": "5", "最大": "7", "极限": "9"}
         lvl = lvl_map.get(self.combo_lvl.get(), "5")
 
-        threading.Thread(target=self.compress_worker, args=(tasks_to_run, sevenz, pwd, hide, lvl), daemon=True).start()
+        # 👑 解析并格式化自定义后缀 (如 .1)
+        ext = self.entry_ext.get().strip()
+        if not ext:
+            ext = ".1"
+        if not ext.startswith('.'):
+            ext = '.' + ext
 
-    def compress_worker(self, tasks, sevenz, pwd, hide, lvl):
-        # 智能判定：如果是 7zG.exe，就不使用隐藏窗口模式，让它自带的真实进度条弹出来！
+        threading.Thread(target=self.compress_worker, args=(tasks_to_run, sevenz, pwd, hide, lvl, ext), daemon=True).start()
+
+    def compress_worker(self, tasks, sevenz, pwd, hide, lvl, ext):
         is_gui_version = sevenz.lower().endswith('7zg.exe')
         
         try:
             for row in tasks:
                 folder_path = row['path']
-                archive_path = f"{folder_path}.7z"
+                # 👑 将后缀动态替换为你设置的伪装后缀
+                archive_path = f"{folder_path}{ext}"
                 
                 self.root.after(0, lambda r=row: r['status_label'].config(text="压缩中...", fg="orange"))
                 
-                cmd = [sevenz, 'a', archive_path, folder_path, f'-mx={lvl}']
+                # 👑 核心魔法：不论后缀变成什么，强行用 '-t7z' 告诉 7-Zip 这是一辆 7z 的车！
+                cmd = [sevenz, 'a', archive_path, folder_path, f'-mx={lvl}', '-t7z']
                 if pwd:
                     cmd.append(f'-p{pwd}')
                     if hide: cmd.append('-mhe=on')
 
                 if is_gui_version:
-                    # 原汁原味的 7zG，脱下隐身衣！
+                    # 👑 彻底解除 7zG.exe 的隐身衣，让真实的进度条尽情弹出来
                     proc = subprocess.run(cmd)
                 else:
-                    # 普通的 7z.exe，穿上隐身衣挡住黑框
                     startupinfo = subprocess.STARTUPINFO()
                     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                     proc = subprocess.run(cmd, startupinfo=startupinfo)

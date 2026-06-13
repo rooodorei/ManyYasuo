@@ -15,23 +15,29 @@ CONFIG_FILE = "config.json"
 class PipelineApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("流水线压缩工作站 (终极满血全参版)")
+        self.root.title("流水线压缩工作站 (终极全记忆版)")
         self.root.geometry("1240x750") 
         self.root.resizable(False, False)
 
         self._is_updating = False
         self.max_cpu_threads = multiprocessing.cpu_count()
 
+        # 👑 1. 读取全局配置（包含性能参数、密码、勾选状态）
         config = self.load_config()
         self.sevenz_path = config.get("7z_path", self.find_default_7z())
         self.default_prefix = config.get("prefix", "HGLIST-")
         self.default_ext = config.get("extension", ".1") 
         
+        # 性能参数默认值
         self.def_lvl = config.get("lvl", "5-标准")
         self.def_dict = config.get("dict", "64 MB")
         self.def_word = config.get("word", "64")
         self.def_solid = config.get("solid", "16 GB")
         self.def_threads = config.get("threads", "自动")
+        
+        # 👑 安全参数默认值
+        self.default_pwd = config.get("pwd", "")              # 默认密码为空
+        self.default_hide = config.get("hide_name", True)     # 默认开启加密文件名
         
         self.is_running = False
         self.left_rows = []
@@ -56,6 +62,7 @@ class PipelineApp:
         return {}
 
     def save_config(self):
+        # 👑 2. 点击保存时，把密码和勾选状态一并写入 json 配置文件
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump({
                 "7z_path": self.entry_7z.get(),
@@ -65,9 +72,11 @@ class PipelineApp:
                 "dict": self.combo_dict.get(),
                 "word": self.combo_word.get(),
                 "solid": self.combo_solid.get(),
-                "threads": self.combo_threads.get()
+                "threads": self.combo_threads.get(),
+                "pwd": self.entry_pwd.get(),               # 永久保存当前密码
+                "hide_name": self.var_hide.get()           # 永久保存勾选状态
             }, f)
-        messagebox.showinfo("成功", "全局设置（包含硬核性能参数）已永久保存！")
+        messagebox.showinfo("成功", "全局配置（包含性能参数、密码与加密状态）已永久保存！")
 
     def setup_ui(self):
         # ================= 顶部：设置与计数器 =================
@@ -159,13 +168,18 @@ class PipelineApp:
         sec_frame = tk.Frame(bottom_frame)
         sec_frame.pack(pady=(0, 5), fill=tk.X)
         
-        tk.Label(sec_frame, text="🔒 统一密码:").pack(side=tk.LEFT)
+        tk.Label(sec_frame, text="🔒 统一压缩密码:").pack(side=tk.LEFT)
         self.entry_pwd = tk.Entry(sec_frame, width=15, show="*")
         self.entry_pwd.pack(side=tk.LEFT, padx=(5, 0))
+        # 👑 3. 自动填入记忆的密码
+        self.entry_pwd.insert(0, self.default_pwd)
+
         self.btn_toggle_pwd = tk.Button(sec_frame, text="👁️", command=self.toggle_pwd_visibility, relief=tk.FLAT, cursor="hand2")
         self.btn_toggle_pwd.pack(side=tk.LEFT, padx=(0, 15))
-        self.var_hide = tk.BooleanVar(value=True)
-        tk.Checkbutton(sec_frame, text="加密文件名", variable=self.var_hide).pack(side=tk.LEFT, padx=(0, 10))
+
+        # 👑 4. 自动恢复记忆的加密文件名勾选状态
+        self.var_hide = tk.BooleanVar(value=self.default_hide)
+        tk.Checkbutton(sec_frame, text="加密文件名(需密码)", variable=self.var_hide).pack(side=tk.LEFT, padx=10)
 
         perf_frame = tk.LabelFrame(bottom_frame, text="⚙️ 7-Zip 核心性能配置 (LZMA2算法)", padx=10, pady=8, fg="#1565C0", font=("", 9, "bold"))
         perf_frame.pack(fill=tk.X, pady=(0, 10))
@@ -175,7 +189,6 @@ class PipelineApp:
         self.combo_lvl.set(self.def_lvl) 
         self.combo_lvl.grid(row=0, column=1, padx=(0, 10))
 
-        # 👑 完全展开的字典大小选项 (对标官方GUI)
         tk.Label(perf_frame, text="字典大小:").grid(row=0, column=2, padx=(0, 5), sticky="e")
         dict_options = [
             "64 KB", "256 KB", "1 MB", "2 MB", "3 MB", "4 MB", "6 MB", "8 MB",
@@ -187,20 +200,18 @@ class PipelineApp:
         if self.def_dict in dict_options:
             self.combo_dict.set(self.def_dict) 
         else:
-            self.combo_dict.current(13) # fallback to 64 MB
+            self.combo_dict.current(13)
         self.combo_dict.grid(row=0, column=3, padx=(0, 10))
 
-        # 👑 完全展开的单词大小选项
         tk.Label(perf_frame, text="单词大小:").grid(row=0, column=4, padx=(0, 5), sticky="e")
         word_options = ["8", "12", "16", "24", "32", "48", "64", "96", "128", "192", "256", "273"]
         self.combo_word = ttk.Combobox(perf_frame, values=word_options, state="readonly", width=5)
         if self.def_word in word_options:
             self.combo_word.set(self.def_word) 
         else:
-            self.combo_word.current(6) # fallback to 64
+            self.combo_word.current(6)
         self.combo_word.grid(row=0, column=5, padx=(0, 10))
 
-        # 👑 完全展开的固实数据大小选项
         tk.Label(perf_frame, text="固实块大小:").grid(row=0, column=6, padx=(0, 5), sticky="e")
         solid_options = [
             "非固实", "1 MB", "2 MB", "4 MB", "8 MB", "16 MB", "32 MB", "64 MB",
@@ -211,7 +222,7 @@ class PipelineApp:
         if self.def_solid in solid_options:
             self.combo_solid.set(self.def_solid) 
         else:
-            self.combo_solid.current(15) # fallback to 16 GB
+            self.combo_solid.current(15)
         self.combo_solid.grid(row=0, column=7, padx=(0, 10))
 
         tk.Label(perf_frame, text="线程数:").grid(row=0, column=8, padx=(0, 5), sticky="e")
@@ -447,14 +458,11 @@ class PipelineApp:
 
         lvl = self.combo_lvl.get().split("-")[0]
         
-        # 👑 动态解析字典大小 ("3840 MB" -> "3840m", "64 KB" -> "64k")
         dict_raw = self.combo_dict.get().replace(" ", "").lower()
         dict_val = dict_raw.replace("kb", "k").replace("mb", "m").replace("gb", "g")
         
-        # 👑 动态解析单词大小
         word_val = self.combo_word.get().strip()
         
-        # 👑 动态解析固实块大小 ("固实" -> "on", "16 GB" -> "16g")
         solid_raw = self.combo_solid.get()
         if solid_raw == "非固实":
             solid_val = "off"

@@ -7,6 +7,7 @@ import shutil
 import threading
 import json
 import re
+import multiprocessing
 from tkinterdnd2 import TkinterDnD, DND_FILES
 
 CONFIG_FILE = "config.json"
@@ -14,8 +15,8 @@ CONFIG_FILE = "config.json"
 class PipelineApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("流水线压缩工作站 (原生进度条&后缀伪装版)")
-        self.root.geometry("1240x700") # 加宽以完美容纳所有输入框
+        self.root.title("流水线压缩工作站 (原生进度条 & 硬核性能版)")
+        self.root.geometry("1240x780") # 稍微加高以容纳专业的性能面板
         self.root.resizable(False, False)
 
         self._is_updating = False
@@ -23,11 +24,14 @@ class PipelineApp:
         config = self.load_config()
         self.sevenz_path = config.get("7z_path", self.find_default_7z())
         self.default_prefix = config.get("prefix", "HGLIST-")
-        self.default_ext = config.get("extension", ".1") # 默认伪装后缀为 .1
+        self.default_ext = config.get("extension", ".1") 
         
         self.is_running = False
         self.left_rows = []
         self.right_rows = []
+
+        # 获取系统最大逻辑处理器(线程)数量
+        self.max_cpu_threads = multiprocessing.cpu_count()
 
         self.setup_ui()
         self.revalidate_left_list()
@@ -52,7 +56,7 @@ class PipelineApp:
             json.dump({
                 "7z_path": self.entry_7z.get(),
                 "prefix": self.entry_prefix.get(),
-                "extension": self.entry_ext.get() # 保存自定义后缀配置
+                "extension": self.entry_ext.get()
             }, f)
         messagebox.showinfo("成功", "设置已保存！")
 
@@ -72,7 +76,6 @@ class PipelineApp:
         self.entry_prefix.insert(0, self.default_prefix)
         self.entry_prefix.bind("<KeyRelease>", lambda e: self.revalidate_left_list())
 
-        # 👑 新增：自定义后缀伪装框
         tk.Label(top_frame, text="后缀:").pack(side=tk.LEFT)
         self.entry_ext = tk.Entry(top_frame, width=6)
         self.entry_ext.pack(side=tk.LEFT, padx=5)
@@ -140,29 +143,64 @@ class PipelineApp:
         self.canvas_right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll_right.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # ================= 底部：安全设置与执行压缩 =================
+        # ================= 底部：安全设置与硬核性能配置 =================
         bottom_frame = tk.Frame(self.root, pady=10)
-        bottom_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        bottom_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10)
 
+        # --- 安全设置行 ---
         sec_frame = tk.Frame(bottom_frame)
-        sec_frame.pack(pady=5)
+        sec_frame.pack(pady=(0, 5), fill=tk.X)
         
-        tk.Label(sec_frame, text="统一压缩密码:").pack(side=tk.LEFT)
-        self.entry_pwd = tk.Entry(sec_frame, width=18, show="*")
+        tk.Label(sec_frame, text="🔒 统一压缩密码:").pack(side=tk.LEFT)
+        self.entry_pwd = tk.Entry(sec_frame, width=20, show="*")
         self.entry_pwd.pack(side=tk.LEFT, padx=(5, 0))
 
         self.btn_toggle_pwd = tk.Button(sec_frame, text="👁️", command=self.toggle_pwd_visibility, relief=tk.FLAT, cursor="hand2")
-        self.btn_toggle_pwd.pack(side=tk.LEFT, padx=(0, 10))
+        self.btn_toggle_pwd.pack(side=tk.LEFT, padx=(0, 15))
 
         self.var_hide = tk.BooleanVar(value=True)
         tk.Checkbutton(sec_frame, text="加密文件名(需密码)", variable=self.var_hide).pack(side=tk.LEFT, padx=10)
 
-        tk.Label(sec_frame, text="压缩等级:").pack(side=tk.LEFT, padx=(10,0))
-        self.combo_lvl = ttk.Combobox(sec_frame, values=["仅存储", "极速", "标准", "最大", "极限"], state="readonly", width=8)
-        self.combo_lvl.current(2)
-        self.combo_lvl.pack(side=tk.LEFT, padx=5)
+        # --- 👑 7-Zip 硬核性能配置面板 ---
+        perf_frame = tk.LabelFrame(bottom_frame, text="⚙️ 7-Zip 核心性能配置 (LZMA2算法)", padx=10, pady=8, fg="#1565C0", font=("", 9, "bold"))
+        perf_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.btn_compress = tk.Button(bottom_frame, text="🚀 开始加密压缩右侧队列 🚀", command=self.do_compress, bg="#4CAF50", fg="white", font=("", 12, "bold"), width=30)
+        # 压缩等级
+        tk.Label(perf_frame, text="压缩等级:").grid(row=0, column=0, padx=(0, 5), sticky="e")
+        self.combo_lvl = ttk.Combobox(perf_frame, values=["0-仅存储", "1-极速", "3-快速", "5-标准", "7-最大", "9-极限"], state="readonly", width=10)
+        self.combo_lvl.current(5) # 默认极限(9) 对应你截图
+        self.combo_lvl.grid(row=0, column=1, padx=(0, 15))
+
+        # 字典大小 (绝对控制内存)
+        tk.Label(perf_frame, text="字典大小:").grid(row=0, column=2, padx=(0, 5), sticky="e")
+        self.combo_dict = ttk.Combobox(perf_frame, values=["16 MB", "32 MB", "64 MB", "128 MB", "256 MB", "512 MB", "1024 MB"], state="readonly", width=10)
+        self.combo_dict.current(4) # 默认 256MB 对应你截图
+        self.combo_dict.grid(row=0, column=3, padx=(0, 15))
+
+        # 单词大小
+        tk.Label(perf_frame, text="单词大小:").grid(row=0, column=4, padx=(0, 5), sticky="e")
+        self.combo_word = ttk.Combobox(perf_frame, values=["32", "64", "128", "273"], state="readonly", width=8)
+        self.combo_word.current(1) # 默认 64 对应你截图
+        self.combo_word.grid(row=0, column=5, padx=(0, 15))
+
+        # 固实数据大小
+        tk.Label(perf_frame, text="固实块大小:").grid(row=0, column=6, padx=(0, 5), sticky="e")
+        self.combo_solid = ttk.Combobox(perf_frame, values=["不固实(Off)", "1 GB", "4 GB", "16 GB", "固实(Solid)"], state="readonly", width=12)
+        self.combo_solid.current(3) # 默认 16 GB 对应你截图
+        self.combo_solid.grid(row=0, column=7, padx=(0, 15))
+
+        # 线程数 (智能获取本机最大线程)
+        tk.Label(perf_frame, text="CPU 线程数:").grid(row=0, column=8, padx=(0, 5), sticky="e")
+        thread_opts = [str(i) for i in range(1, self.max_cpu_threads + 1)]
+        self.combo_threads = ttk.Combobox(perf_frame, values=thread_opts, state="readonly", width=5)
+        # 默认选最大线程的一半（防卡死），你可以自由改
+        default_thread = str(min(8, self.max_cpu_threads)) 
+        if default_thread in thread_opts:
+            self.combo_threads.set(default_thread)
+        self.combo_threads.grid(row=0, column=9)
+
+        # 最终按钮
+        self.btn_compress = tk.Button(bottom_frame, text="🚀 开始加密压缩右侧队列 🚀", command=self.do_compress, bg="#4CAF50", fg="white", font=("", 13, "bold"), width=35, height=2)
         self.btn_compress.pack(pady=5)
 
     # ================= 核心业务逻辑 =================
@@ -377,39 +415,62 @@ class PipelineApp:
         self.entry_pwd.config(state=tk.DISABLED)
         self.btn_toggle_pwd.config(state=tk.DISABLED)
 
+        # 👑 读取所有基础设置
         pwd = self.entry_pwd.get()
         hide = self.var_hide.get()
-        lvl_map = {"仅存储": "0", "极速": "1", "标准": "5", "最大": "7", "极限": "9"}
-        lvl = lvl_map.get(self.combo_lvl.get(), "5")
-
-        # 👑 解析并格式化自定义后缀 (如 .1)
         ext = self.entry_ext.get().strip()
-        if not ext:
-            ext = ".1"
-        if not ext.startswith('.'):
-            ext = '.' + ext
+        if not ext: ext = ".1"
+        if not ext.startswith('.'): ext = '.' + ext
 
-        threading.Thread(target=self.compress_worker, args=(tasks_to_run, sevenz, pwd, hide, lvl, ext), daemon=True).start()
+        # 👑 映射硬核性能参数 (将中文选项翻译为 7-Zip 原生命令行参数)
+        
+        # 1. 压缩等级 (-mx)
+        lvl = self.combo_lvl.get().split("-")[0] # 取前面的数字，例如 "9-极限" -> "9"
+        
+        # 2. 字典大小 (-md)
+        dict_map = {"16 MB":"16m", "32 MB":"32m", "64 MB":"64m", "128 MB":"128m", "256 MB":"256m", "512 MB":"512m", "1024 MB":"1024m"}
+        dict_val = dict_map.get(self.combo_dict.get(), "256m")
+        
+        # 3. 单词大小 (-mfb)
+        word_val = self.combo_word.get()
+        
+        # 4. 固实块大小 (-ms)
+        solid_map = {"不固实(Off)":"off", "1 GB":"1g", "4 GB":"4g", "16 GB":"16g", "固实(Solid)":"on"}
+        solid_val = solid_map.get(self.combo_solid.get(), "16g")
+        
+        # 5. 线程数 (-mmt)
+        threads_val = self.combo_threads.get()
 
-    def compress_worker(self, tasks, sevenz, pwd, hide, lvl, ext):
+        # 把这堆硬核参数打包丢给后台线程
+        threading.Thread(target=self.compress_worker, args=(tasks_to_run, sevenz, pwd, hide, lvl, dict_val, word_val, solid_val, threads_val, ext), daemon=True).start()
+
+    def compress_worker(self, tasks, sevenz, pwd, hide, lvl, dict_val, word_val, solid_val, threads_val, ext):
         is_gui_version = sevenz.lower().endswith('7zg.exe')
         
         try:
             for row in tasks:
                 folder_path = row['path']
-                # 👑 将后缀动态替换为你设置的伪装后缀
                 archive_path = f"{folder_path}{ext}"
                 
                 self.root.after(0, lambda r=row: r['status_label'].config(text="压缩中...", fg="orange"))
                 
-                # 👑 核心魔法：不论后缀变成什么，强行用 '-t7z' 告诉 7-Zip 这是一辆 7z 的车！
-                cmd = [sevenz, 'a', archive_path, folder_path, f'-mx={lvl}', '-t7z']
+                # 👑 终极核心命令行拼装：严格遵守 LZMA2 算法与自定义参数
+                cmd = [
+                    sevenz, 'a', archive_path, folder_path,
+                    f'-t7z',              # 指定7z格式 (不受后缀名干扰)
+                    f'-m0=lzma2',         # 指定算法为 LZMA2 (支持多线程效率最高)
+                    f'-mx={lvl}',         # 压缩等级
+                    f'-md={dict_val}',    # 字典大小 (绝对控制内存)
+                    f'-mfb={word_val}',   # 单词大小
+                    f'-ms={solid_val}',   # 固实数据
+                    f'-mmt={threads_val}' # 线程控制 (防卡死核心)
+                ]
+                
                 if pwd:
                     cmd.append(f'-p{pwd}')
                     if hide: cmd.append('-mhe=on')
 
                 if is_gui_version:
-                    # 👑 彻底解除 7zG.exe 的隐身衣，让真实的进度条尽情弹出来
                     proc = subprocess.run(cmd)
                 else:
                     startupinfo = subprocess.STARTUPINFO()

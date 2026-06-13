@@ -15,23 +15,29 @@ CONFIG_FILE = "config.json"
 class PipelineApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("流水线压缩工作站 (原生进度条 & 硬核性能版)")
-        self.root.geometry("1240x780") # 稍微加高以容纳专业的性能面板
+        self.root.title("流水线压缩工作站 (终极记忆硬核版)")
+        self.root.geometry("1240x750") 
         self.root.resizable(False, False)
 
         self._is_updating = False
+        self.max_cpu_threads = multiprocessing.cpu_count()
 
+        # 👑 1. 读取所有配置（包括性能参数）
         config = self.load_config()
         self.sevenz_path = config.get("7z_path", self.find_default_7z())
         self.default_prefix = config.get("prefix", "HGLIST-")
         self.default_ext = config.get("extension", ".1") 
         
+        # 性能参数默认值
+        self.def_lvl = config.get("lvl", "5-标准")
+        self.def_dict = config.get("dict", "256 MB")
+        self.def_word = config.get("word", "64")
+        self.def_solid = config.get("solid", "16 GB")
+        self.def_threads = config.get("threads", "自动")
+        
         self.is_running = False
         self.left_rows = []
         self.right_rows = []
-
-        # 获取系统最大逻辑处理器(线程)数量
-        self.max_cpu_threads = multiprocessing.cpu_count()
 
         self.setup_ui()
         self.revalidate_left_list()
@@ -52,13 +58,19 @@ class PipelineApp:
         return {}
 
     def save_config(self):
+        # 👑 2. 保存时，把底部的硬核性能参数一起写进硬盘
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump({
                 "7z_path": self.entry_7z.get(),
                 "prefix": self.entry_prefix.get(),
-                "extension": self.entry_ext.get()
+                "extension": self.entry_ext.get(),
+                "lvl": self.combo_lvl.get(),
+                "dict": self.combo_dict.get(),
+                "word": self.combo_word.get(),
+                "solid": self.combo_solid.get(),
+                "threads": self.combo_threads.get()
             }, f)
-        messagebox.showinfo("成功", "设置已保存！")
+        messagebox.showinfo("成功", "全局设置（包含性能参数）已永久保存！")
 
     def setup_ui(self):
         # ================= 顶部：设置与计数器 =================
@@ -147,7 +159,6 @@ class PipelineApp:
         bottom_frame = tk.Frame(self.root, pady=10)
         bottom_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10)
 
-        # --- 安全设置行 ---
         sec_frame = tk.Frame(bottom_frame)
         sec_frame.pack(pady=(0, 5), fill=tk.X)
         
@@ -161,45 +172,39 @@ class PipelineApp:
         self.var_hide = tk.BooleanVar(value=True)
         tk.Checkbutton(sec_frame, text="加密文件名(需密码)", variable=self.var_hide).pack(side=tk.LEFT, padx=10)
 
-        # --- 👑 7-Zip 硬核性能配置面板 ---
         perf_frame = tk.LabelFrame(bottom_frame, text="⚙️ 7-Zip 核心性能配置 (LZMA2算法)", padx=10, pady=8, fg="#1565C0", font=("", 9, "bold"))
         perf_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # 压缩等级
+        # 👑 3. 初始化时自动加载之前保存的配置
         tk.Label(perf_frame, text="压缩等级:").grid(row=0, column=0, padx=(0, 5), sticky="e")
         self.combo_lvl = ttk.Combobox(perf_frame, values=["0-仅存储", "1-极速", "3-快速", "5-标准", "7-最大", "9-极限"], state="readonly", width=10)
-        self.combo_lvl.current(5) # 默认极限(9) 对应你截图
+        self.combo_lvl.set(self.def_lvl) 
         self.combo_lvl.grid(row=0, column=1, padx=(0, 15))
 
-        # 字典大小 (绝对控制内存)
         tk.Label(perf_frame, text="字典大小:").grid(row=0, column=2, padx=(0, 5), sticky="e")
         self.combo_dict = ttk.Combobox(perf_frame, values=["16 MB", "32 MB", "64 MB", "128 MB", "256 MB", "512 MB", "1024 MB"], state="readonly", width=10)
-        self.combo_dict.current(4) # 默认 256MB 对应你截图
+        self.combo_dict.set(self.def_dict) 
         self.combo_dict.grid(row=0, column=3, padx=(0, 15))
 
-        # 单词大小
         tk.Label(perf_frame, text="单词大小:").grid(row=0, column=4, padx=(0, 5), sticky="e")
         self.combo_word = ttk.Combobox(perf_frame, values=["32", "64", "128", "273"], state="readonly", width=8)
-        self.combo_word.current(1) # 默认 64 对应你截图
+        self.combo_word.set(self.def_word) 
         self.combo_word.grid(row=0, column=5, padx=(0, 15))
 
-        # 固实数据大小
         tk.Label(perf_frame, text="固实块大小:").grid(row=0, column=6, padx=(0, 5), sticky="e")
         self.combo_solid = ttk.Combobox(perf_frame, values=["不固实(Off)", "1 GB", "4 GB", "16 GB", "固实(Solid)"], state="readonly", width=12)
-        self.combo_solid.current(3) # 默认 16 GB 对应你截图
+        self.combo_solid.set(self.def_solid) 
         self.combo_solid.grid(row=0, column=7, padx=(0, 15))
 
-        # 线程数 (智能获取本机最大线程)
         tk.Label(perf_frame, text="CPU 线程数:").grid(row=0, column=8, padx=(0, 5), sticky="e")
-        thread_opts = [str(i) for i in range(1, self.max_cpu_threads + 1)]
-        self.combo_threads = ttk.Combobox(perf_frame, values=thread_opts, state="readonly", width=5)
-        # 默认选最大线程的一半（防卡死），你可以自由改
-        default_thread = str(min(8, self.max_cpu_threads)) 
-        if default_thread in thread_opts:
-            self.combo_threads.set(default_thread)
+        thread_opts = ["自动"] + [str(i) for i in range(1, self.max_cpu_threads + 1)]
+        self.combo_threads = ttk.Combobox(perf_frame, values=thread_opts, state="readonly", width=6)
+        if self.def_threads in thread_opts:
+            self.combo_threads.set(self.def_threads)
+        else:
+            self.combo_threads.current(0)
         self.combo_threads.grid(row=0, column=9)
 
-        # 最终按钮
         self.btn_compress = tk.Button(bottom_frame, text="🚀 开始加密压缩右侧队列 🚀", command=self.do_compress, bg="#4CAF50", fg="white", font=("", 13, "bold"), width=35, height=2)
         self.btn_compress.pack(pady=5)
 
@@ -415,36 +420,31 @@ class PipelineApp:
         self.entry_pwd.config(state=tk.DISABLED)
         self.btn_toggle_pwd.config(state=tk.DISABLED)
 
-        # 👑 读取所有基础设置
         pwd = self.entry_pwd.get()
         hide = self.var_hide.get()
+        
         ext = self.entry_ext.get().strip()
         if not ext: ext = ".1"
         if not ext.startswith('.'): ext = '.' + ext
 
-        # 👑 映射硬核性能参数 (将中文选项翻译为 7-Zip 原生命令行参数)
-        
-        # 1. 压缩等级 (-mx)
-        lvl = self.combo_lvl.get().split("-")[0] # 取前面的数字，例如 "9-极限" -> "9"
-        
-        # 2. 字典大小 (-md)
+        lvl = self.combo_lvl.get().split("-")[0]
         dict_map = {"16 MB":"16m", "32 MB":"32m", "64 MB":"64m", "128 MB":"128m", "256 MB":"256m", "512 MB":"512m", "1024 MB":"1024m"}
         dict_val = dict_map.get(self.combo_dict.get(), "256m")
         
-        # 3. 单词大小 (-mfb)
         word_val = self.combo_word.get()
         
-        # 4. 固实块大小 (-ms)
         solid_map = {"不固实(Off)":"off", "1 GB":"1g", "4 GB":"4g", "16 GB":"16g", "固实(Solid)":"on"}
         solid_val = solid_map.get(self.combo_solid.get(), "16g")
         
-        # 5. 线程数 (-mmt)
-        threads_val = self.combo_threads.get()
+        thread_str = self.combo_threads.get()
+        if thread_str == "自动":
+            thread_arg = ""
+        else:
+            thread_arg = f"-mmt={thread_str}"
 
-        # 把这堆硬核参数打包丢给后台线程
-        threading.Thread(target=self.compress_worker, args=(tasks_to_run, sevenz, pwd, hide, lvl, dict_val, word_val, solid_val, threads_val, ext), daemon=True).start()
+        threading.Thread(target=self.compress_worker, args=(tasks_to_run, sevenz, pwd, hide, lvl, dict_val, word_val, solid_val, thread_arg, ext), daemon=True).start()
 
-    def compress_worker(self, tasks, sevenz, pwd, hide, lvl, dict_val, word_val, solid_val, threads_val, ext):
+    def compress_worker(self, tasks, sevenz, pwd, hide, lvl, dict_val, word_val, solid_val, thread_arg, ext):
         is_gui_version = sevenz.lower().endswith('7zg.exe')
         
         try:
@@ -454,18 +454,12 @@ class PipelineApp:
                 
                 self.root.after(0, lambda r=row: r['status_label'].config(text="压缩中...", fg="orange"))
                 
-                # 👑 终极核心命令行拼装：严格遵守 LZMA2 算法与自定义参数
                 cmd = [
                     sevenz, 'a', archive_path, folder_path,
-                    f'-t7z',              # 指定7z格式 (不受后缀名干扰)
-                    f'-m0=lzma2',         # 指定算法为 LZMA2 (支持多线程效率最高)
-                    f'-mx={lvl}',         # 压缩等级
-                    f'-md={dict_val}',    # 字典大小 (绝对控制内存)
-                    f'-mfb={word_val}',   # 单词大小
-                    f'-ms={solid_val}',   # 固实数据
-                    f'-mmt={threads_val}' # 线程控制 (防卡死核心)
+                    '-t7z', f'-m0=lzma2', f'-mx={lvl}', f'-md={dict_val}', f'-mfb={word_val}', f'-ms={solid_val}'
                 ]
                 
+                if thread_arg: cmd.append(thread_arg)
                 if pwd:
                     cmd.append(f'-p{pwd}')
                     if hide: cmd.append('-mhe=on')

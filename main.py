@@ -15,22 +15,20 @@ CONFIG_FILE = "config.json"
 class PipelineApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("流水线压缩工作站 (终极记忆硬核版)")
+        self.root.title("流水线压缩工作站 (终极满血全参版)")
         self.root.geometry("1240x750") 
         self.root.resizable(False, False)
 
         self._is_updating = False
         self.max_cpu_threads = multiprocessing.cpu_count()
 
-        # 👑 1. 读取所有配置（包括性能参数）
         config = self.load_config()
         self.sevenz_path = config.get("7z_path", self.find_default_7z())
         self.default_prefix = config.get("prefix", "HGLIST-")
         self.default_ext = config.get("extension", ".1") 
         
-        # 性能参数默认值
         self.def_lvl = config.get("lvl", "5-标准")
-        self.def_dict = config.get("dict", "256 MB")
+        self.def_dict = config.get("dict", "64 MB")
         self.def_word = config.get("word", "64")
         self.def_solid = config.get("solid", "16 GB")
         self.def_threads = config.get("threads", "自动")
@@ -58,7 +56,6 @@ class PipelineApp:
         return {}
 
     def save_config(self):
-        # 👑 2. 保存时，把底部的硬核性能参数一起写进硬盘
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump({
                 "7z_path": self.entry_7z.get(),
@@ -70,7 +67,7 @@ class PipelineApp:
                 "solid": self.combo_solid.get(),
                 "threads": self.combo_threads.get()
             }, f)
-        messagebox.showinfo("成功", "全局设置（包含性能参数）已永久保存！")
+        messagebox.showinfo("成功", "全局设置（包含硬核性能参数）已永久保存！")
 
     def setup_ui(self):
         # ================= 顶部：设置与计数器 =================
@@ -162,41 +159,62 @@ class PipelineApp:
         sec_frame = tk.Frame(bottom_frame)
         sec_frame.pack(pady=(0, 5), fill=tk.X)
         
-        tk.Label(sec_frame, text="🔒 统一压缩密码:").pack(side=tk.LEFT)
-        self.entry_pwd = tk.Entry(sec_frame, width=20, show="*")
+        tk.Label(sec_frame, text="🔒 统一密码:").pack(side=tk.LEFT)
+        self.entry_pwd = tk.Entry(sec_frame, width=15, show="*")
         self.entry_pwd.pack(side=tk.LEFT, padx=(5, 0))
-
         self.btn_toggle_pwd = tk.Button(sec_frame, text="👁️", command=self.toggle_pwd_visibility, relief=tk.FLAT, cursor="hand2")
         self.btn_toggle_pwd.pack(side=tk.LEFT, padx=(0, 15))
-
         self.var_hide = tk.BooleanVar(value=True)
-        tk.Checkbutton(sec_frame, text="加密文件名(需密码)", variable=self.var_hide).pack(side=tk.LEFT, padx=10)
+        tk.Checkbutton(sec_frame, text="加密文件名", variable=self.var_hide).pack(side=tk.LEFT, padx=(0, 10))
 
         perf_frame = tk.LabelFrame(bottom_frame, text="⚙️ 7-Zip 核心性能配置 (LZMA2算法)", padx=10, pady=8, fg="#1565C0", font=("", 9, "bold"))
         perf_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # 👑 3. 初始化时自动加载之前保存的配置
         tk.Label(perf_frame, text="压缩等级:").grid(row=0, column=0, padx=(0, 5), sticky="e")
-        self.combo_lvl = ttk.Combobox(perf_frame, values=["0-仅存储", "1-极速", "3-快速", "5-标准", "7-最大", "9-极限"], state="readonly", width=10)
+        self.combo_lvl = ttk.Combobox(perf_frame, values=["0-仅存储", "1-极速", "3-快速", "5-标准", "7-最大", "9-极限"], state="readonly", width=8)
         self.combo_lvl.set(self.def_lvl) 
-        self.combo_lvl.grid(row=0, column=1, padx=(0, 15))
+        self.combo_lvl.grid(row=0, column=1, padx=(0, 10))
 
+        # 👑 完全展开的字典大小选项 (对标官方GUI)
         tk.Label(perf_frame, text="字典大小:").grid(row=0, column=2, padx=(0, 5), sticky="e")
-        self.combo_dict = ttk.Combobox(perf_frame, values=["16 MB", "32 MB", "64 MB", "128 MB", "256 MB", "512 MB", "1024 MB"], state="readonly", width=10)
-        self.combo_dict.set(self.def_dict) 
-        self.combo_dict.grid(row=0, column=3, padx=(0, 15))
+        dict_options = [
+            "64 KB", "256 KB", "1 MB", "2 MB", "3 MB", "4 MB", "6 MB", "8 MB",
+            "12 MB", "16 MB", "24 MB", "32 MB", "48 MB", "64 MB", "96 MB",
+            "128 MB", "192 MB", "256 MB", "384 MB", "512 MB", "768 MB",
+            "1024 MB", "1536 MB", "2048 MB", "3072 MB", "3840 MB"
+        ]
+        self.combo_dict = ttk.Combobox(perf_frame, values=dict_options, state="readonly", width=8)
+        if self.def_dict in dict_options:
+            self.combo_dict.set(self.def_dict) 
+        else:
+            self.combo_dict.current(13) # fallback to 64 MB
+        self.combo_dict.grid(row=0, column=3, padx=(0, 10))
 
+        # 👑 完全展开的单词大小选项
         tk.Label(perf_frame, text="单词大小:").grid(row=0, column=4, padx=(0, 5), sticky="e")
-        self.combo_word = ttk.Combobox(perf_frame, values=["32", "64", "128", "273"], state="readonly", width=8)
-        self.combo_word.set(self.def_word) 
-        self.combo_word.grid(row=0, column=5, padx=(0, 15))
+        word_options = ["8", "12", "16", "24", "32", "48", "64", "96", "128", "192", "256", "273"]
+        self.combo_word = ttk.Combobox(perf_frame, values=word_options, state="readonly", width=5)
+        if self.def_word in word_options:
+            self.combo_word.set(self.def_word) 
+        else:
+            self.combo_word.current(6) # fallback to 64
+        self.combo_word.grid(row=0, column=5, padx=(0, 10))
 
+        # 👑 完全展开的固实数据大小选项
         tk.Label(perf_frame, text="固实块大小:").grid(row=0, column=6, padx=(0, 5), sticky="e")
-        self.combo_solid = ttk.Combobox(perf_frame, values=["不固实(Off)", "1 GB", "4 GB", "16 GB", "固实(Solid)"], state="readonly", width=12)
-        self.combo_solid.set(self.def_solid) 
-        self.combo_solid.grid(row=0, column=7, padx=(0, 15))
+        solid_options = [
+            "非固实", "1 MB", "2 MB", "4 MB", "8 MB", "16 MB", "32 MB", "64 MB",
+            "128 MB", "256 MB", "512 MB", "1 GB", "2 GB", "4 GB", "8 GB",
+            "16 GB", "32 GB", "64 GB", "固实"
+        ]
+        self.combo_solid = ttk.Combobox(perf_frame, values=solid_options, state="readonly", width=10)
+        if self.def_solid in solid_options:
+            self.combo_solid.set(self.def_solid) 
+        else:
+            self.combo_solid.current(15) # fallback to 16 GB
+        self.combo_solid.grid(row=0, column=7, padx=(0, 10))
 
-        tk.Label(perf_frame, text="CPU 线程数:").grid(row=0, column=8, padx=(0, 5), sticky="e")
+        tk.Label(perf_frame, text="线程数:").grid(row=0, column=8, padx=(0, 5), sticky="e")
         thread_opts = ["自动"] + [str(i) for i in range(1, self.max_cpu_threads + 1)]
         self.combo_threads = ttk.Combobox(perf_frame, values=thread_opts, state="readonly", width=6)
         if self.def_threads in thread_opts:
@@ -428,13 +446,22 @@ class PipelineApp:
         if not ext.startswith('.'): ext = '.' + ext
 
         lvl = self.combo_lvl.get().split("-")[0]
-        dict_map = {"16 MB":"16m", "32 MB":"32m", "64 MB":"64m", "128 MB":"128m", "256 MB":"256m", "512 MB":"512m", "1024 MB":"1024m"}
-        dict_val = dict_map.get(self.combo_dict.get(), "256m")
         
-        word_val = self.combo_word.get()
+        # 👑 动态解析字典大小 ("3840 MB" -> "3840m", "64 KB" -> "64k")
+        dict_raw = self.combo_dict.get().replace(" ", "").lower()
+        dict_val = dict_raw.replace("kb", "k").replace("mb", "m").replace("gb", "g")
         
-        solid_map = {"不固实(Off)":"off", "1 GB":"1g", "4 GB":"4g", "16 GB":"16g", "固实(Solid)":"on"}
-        solid_val = solid_map.get(self.combo_solid.get(), "16g")
+        # 👑 动态解析单词大小
+        word_val = self.combo_word.get().strip()
+        
+        # 👑 动态解析固实块大小 ("固实" -> "on", "16 GB" -> "16g")
+        solid_raw = self.combo_solid.get()
+        if solid_raw == "非固实":
+            solid_val = "off"
+        elif solid_raw == "固实":
+            solid_val = "on"
+        else:
+            solid_val = solid_raw.replace(" ", "").lower().replace("kb", "k").replace("mb", "m").replace("gb", "g")
         
         thread_str = self.combo_threads.get()
         if thread_str == "自动":

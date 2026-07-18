@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -60,7 +61,9 @@ class PipelineApp:
         self.cancel_requested = False
         self.current_process = None
         self.current_row = None
-        self.ui_events = queue.Queue()
+        # Keep UI work bounded. Progress is also throttled by the worker, so
+        # this queue cannot grow indefinitely during long compression jobs.
+        self.ui_events = queue.Queue(maxsize=512)
         self.config = self.load_config()
         self.settings_expanded = False
         self.status_var = ctk.StringVar(value="")
@@ -714,16 +717,39 @@ class PipelineApp:
                     errors="replace",
                     bufsize=0,
                     startupinfo=self.hidden_startupinfo(),
+                    creationflags=self.compression_creation_flags(),
                 )
-                output = ""
+                progress_output = ""
+                last_emitted_progress = -1
+                last_progress_emit_at = 0.0
+
+                def emit_progress(text):
+                    nonlocal last_emitted_progress, last_progress_emit_at
+                    matches = re.findall(r"(\d{1,3})%", text)
+                    if not matches:
+                        return
+                    value = min(100, int(matches[-1]))
+                    now = time.monotonic()
+                    if value == last_emitted_progress:
+                        return
+                    # Ten UI updates per second is visually smooth and avoids
+                    # flooding Tk's event loop with duplicate progress values.
+                    if value not in {0, 100} and now - last_progress_emit_at < 0.1:
+                        return
+                    last_emitted_progress = value
+                    last_progress_emit_at = now
+                    self.ui_events.put(("progress", row, value, index, len(tasks)))
+
                 while True:
                     char = self.current_process.stdout.read(1)
                     if not char:
                         break
-                    output = (output + char)[-80:]
-                    match = re.search(r"(\d{1,3})%", output)
-                    if match:
-                        self.ui_events.put(("progress", row, min(100, int(match.group(1))), index, len(tasks)))
+                    if char in "\r\n":
+                        emit_progress(progress_output)
+                        progress_output = ""
+                    else:
+                        progress_output = (progress_output + char)[-256:]
+                emit_progress(progress_output)
                 result = self.current_process.wait()
                 if self.cancel_requested:
                     row["status"] = "cancelled"
@@ -755,10 +781,23 @@ class PipelineApp:
         info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         return info
 
+    @staticmethod
+    def compression_creation_flags():
+        if os.name != "nt":
+            return 0
+        # Compression is background work. Keeping it below the UI process
+        # priority prevents an all-core 7-Zip job from starving window redraws.
+        return subprocess.BELOW_NORMAL_PRIORITY_CLASS
+
     def poll_ui_events(self):
+        processed = 0
+        deadline = time.perf_counter() + 0.008
         try:
-            while True:
+            # Never drain an unbounded queue in one Tk callback. Returning to
+            # mainloop regularly lets Windows repaint after task switching.
+            while processed < 32 and time.perf_counter() < deadline:
                 event = self.ui_events.get_nowait()
+                processed += 1
                 if event[0] == "progress":
                     _, row, value, index, total = event
                     row["progress"].set(value / 100)
@@ -774,7 +813,7 @@ class PipelineApp:
                     self.finish_compression()
         except queue.Empty:
             pass
-        self.root.after(80, self.poll_ui_events)
+        self.root.after(20 if not self.ui_events.empty() else 50, self.poll_ui_events)
 
     def finish_compression(self):
         self.is_running = False

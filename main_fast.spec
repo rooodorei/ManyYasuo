@@ -1,5 +1,5 @@
-# PyInstaller single-file build specification.  The tkinterdnd2 native library
-# is embedded and extracted to a temporary folder only while the app runs.
+# PyInstaller fast-starting one-directory build.
+# The distributable folder contains the EXE plus one _internal dependency folder.
 from PyInstaller.utils.hooks import collect_data_files
 
 
@@ -24,9 +24,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="BatchCompressor",
     debug=False,
     bootloader_ignore_signals=False,
@@ -34,4 +33,14 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
+    contents_directory="_internal",
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="BatchCompressorFast",
 )

@@ -1,12 +1,11 @@
 [project]
 name = "manyyasuo"
 version = "0.1.0"
-description = "Add your description here"
+description = "Modern batch 7-Zip compression workstation"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
-    "flet>=0.85.3",
-    "py7zr>=1.1.0",
+    "customtkinter>=5.2.2",
     "pyinstaller>=6.20.0",
     "tkinterdnd2>=0.5.0",
 ]

@@ -1,0 +1,12 @@
+[project]
+name = "jieya"
+version = "0.1.0"
+description = "Modern batch extractor for ManyYasuo archives"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "customtkinter>=5.2.2",
+    "pyinstaller>=6.20.0",
+    "tkinterdnd2>=0.5.0",
+]
+

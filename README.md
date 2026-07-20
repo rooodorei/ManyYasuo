@@ -37,3 +37,5 @@ uv run pyinstaller --noconfirm --clean main_fast.spec
 ```
 
 生成目录为 `dist\BatchCompressorFast`。发布时保留整个目录，用户只需运行其中的 `BatchCompressor.exe`；其余依赖统一放在 `_internal` 目录中。该版本无需每次临时解包，启动明显更快。
+
+# 加了批量解压
